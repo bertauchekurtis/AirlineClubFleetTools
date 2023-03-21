@@ -755,7 +755,7 @@ server <- function(input, output, session){
   suggestedAirlines <- reactive({
     airlineVector <- mergedChanges()$Airline
     lowerAirlineVecotr <- tolower(airlineVector)
-    idx <- agrep(tolower(input$airlineSearch), lowerAirlineVecotr, 0.1)
+    idx <- agrep(tolower(input$airlineSearch), lowerAirlineVecotr, 0.05)
     string <- ""
     if(length(idx) == 1)
     {
