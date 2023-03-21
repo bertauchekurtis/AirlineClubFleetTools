@@ -754,11 +754,18 @@ server <- function(input, output, session){
   
   suggestedAirlines <- reactive({
     airlineVector <- mergedChanges()$Airline
-    idx <- agrep(input$airlineSearch, airlineVector, 0.5)
+    idx <- agrep(input$airlineSearch, airlineVector, 0.1)
     string <- ""
-    for(x in airlineVector[idx])
-      string <- paste(string, x, ", ", sep = "")
-    string <- substr(string, 1, nchar(string) - 2)
+    if(length(idx) == 1)
+    {
+      updateTextInput(session, "airlineSearch", value = airlineVector[idx])
+    }
+    else
+    {
+      for(x in airlineVector[idx])
+        string <- paste(string, x, ", ", sep = "")
+      string <- substr(string, 1, nchar(string) - 2)
+    }
     string
   })
     
