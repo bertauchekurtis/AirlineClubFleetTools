@@ -9,8 +9,8 @@ library(shinyjqui)
 library(DT)
 library(shinycssloaders)
 library(shinythemes)
-library(ggplot2)
-library(ggrepel)
+#library(ggplot2)
+#library(ggrepel)
 
 # pre-processing
 
