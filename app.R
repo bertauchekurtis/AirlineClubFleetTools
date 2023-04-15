@@ -9,6 +9,8 @@ library(shinyjqui)
 library(DT)
 library(shinycssloaders)
 library(shinythemes)
+library(ggplot2)
+library(ggrepel)
 
 # pre-processing
 
@@ -21,19 +23,19 @@ file_list <- append(file_list, "Select a file", after = 0)
 
 ui <- fluidPage(theme = shinytheme("paper"),
  
-  headerPanel("AC Fleet Tools"),
+  headerPanel("AC/MFC Fleet Tools"),
   
   sidebarPanel(
     
     h4("Choose Two Reports to Compare"),
     selectInput(
       inputId = "file_select_input_1",
-      label = "Choose file 1:",
+      label = "Choose file 1 (Older Date):",
       choices = file_list
     ),
     selectInput(
       inputId = "file_select_input_2",
-      label = "Choose file 2:",
+      label = "Choose file 2 (Newer Date):",
       choices = file_list
     ),
     h4("Import new Files"),
@@ -144,7 +146,31 @@ ui <- fluidPage(theme = shinytheme("paper"),
                                      tableOutput("airlineDetail"),
                                      h4("Current Fleet:"),
                                      plotOutput("fleetPlot"))
-                          ))
+                          )),
+                 tabPanel("Aircraft Search",
+                          br(),
+                          h4("Search for an Aircraft for more details:"),
+                          textInput(inputId = "aircraftSearch", "Enter aircraft model..."),
+                          tabsetPanel(
+                            id = "aircraftSearchPanel",
+                            type = "hidden",
+                            tabPanel("noSearch",
+                                     h4("You haven't searched for anything yet.")),
+                            tabPanel("invalidSearch",
+                                     br(),
+                                     textOutput("suggestionTitleAC"),
+                                     h4("Suggestions:"),
+                                     withSpinner(textOutput("suggestionsAC"), type = 6)),
+                            tabPanel("validSearch",
+                                     textOutput("validHeaderAC"),
+                                     br(),
+                                     h4("Ownwership Distribution"),
+                                     plotOutput("aircraftPlot"),
+                                     tableOutput("aircraftDetail"),
+                                     p("Note: Don't use these numbers to calculate the in-game ownership percentage. In-game ownership percentage uses aircraft on the used market which are not included here.")
+                                     )
+                          )
+                          )
                ))
     )
   )
@@ -550,7 +576,9 @@ server <- function(input, output, session){
                         ". ",
                         ":small_red_triangle_down: ",
                         tenDF[i,1],
-                        " :flag_: | ",
+                        " :flag_: ",
+                        tenDF[i,2],
+                        " | ",
                         sep = "")
       }
       else if(tenDF[i,5] < tenDF[i,6])
@@ -561,7 +589,9 @@ server <- function(input, output, session){
                         ". ",
                         ":arrow_up_small: ",
                         tenDF[i,1],
-                        " :flag_: | ",
+                        " :flag_: ",
+                        tenDF[i,2],
+                        " | ",
                         sep = "")
       }
       else
@@ -571,7 +601,9 @@ server <- function(input, output, session){
                         tenDF[i,5],
                         ". ",
                         tenDF[i,1],
-                        " :flag_: | ",
+                        " :flag_: ",
+                        tenDF[i,2],
+                        " | ",
                         sep = "")
       }
       if(tenDF[i,4] > 0)
@@ -728,7 +760,8 @@ server <- function(input, output, session){
   
   output$fleetPlot <- renderPlot({
     dfHere <- airlineDetailDF()
-    dfHere <- dfHere[-nrow(dfHere),]
+    #print(which(dfHere$Aircraft == "Total"))
+    dfHere <- dfHere[-which(dfHere$Aircraft == "Total"),]
     dfHere <- dfHere[dfHere$`New Count` > 0,]
     pie(strtoi(dfHere$`New Count`), labels = dfHere$Aircraft, col = c("blue", "aquamarine4", "brown4", "darkslateblue", "khaki4","mediumslateblue","springgreen4", "turquoise4","tomato","thistle3","seagreen3"))
   })
@@ -781,8 +814,8 @@ server <- function(input, output, session){
     combinedFull <- merge(oldFull, newFull, by = "Airline", all.x = TRUE, all.y = TRUE)
     combinedFull[is.na(combinedFull)] <- 0
     
-    mergedOld <- combinedFull[2:143]
-    mergedNew <- combinedFull[144:285]
+    mergedOld <- combinedFull[2:ceiling(ncol(combinedFull)/2)]
+    mergedNew <- combinedFull[(ceiling(ncol(combinedFull)/2) + 1):ncol(combinedFull)]
     mergedChanges <- mergedNew - mergedOld
     mergedChanges$Airline <- combinedFull$Airline
     mergedChanges$absTotal <- abs(mergedChanges$Total.y)
@@ -844,6 +877,119 @@ server <- function(input, output, session){
     total[is.na(total)] <- 0
     total$Change <- strtoi(total$`New Count`) - strtoi(total$`Old Count`)
     total
+  })
+  
+
+  
+  ########## -- airline search -- ##########
+  
+  #### -- element renders -- ####
+  output$suggestionTitleAC <- renderText({
+    paste(input$aircraftSearch, "was not found.")
+  })
+  
+  output$suggestionsAC <- renderText({
+    suggestedAircraft()
+  })
+  
+  output$validHeaderAC <- renderText({
+    paste("Operators of", input$aircraftSearch, ":")
+  })
+  
+  output$aircraftDetail <- renderTable({
+    specificAircraftDF()
+  })
+  
+  output$aircraftPlot <- renderPlot({
+    dfHere <- specificAircraftDF()
+    #ggplot(dfHere, aes(x="", y=dfHere[,2], fill=Airline, label = Airline))+
+    #  theme(legend.position = "none") +
+    #  geom_bar(stat = "identity", width = 1) +
+    #  coord_polar("y", start = 0) +
+    #  geom_text_repel(max.overlaps = 999, min.segment.length = Inf, ylim = 5)
+    if(nrow(dfHere) > 20)
+    {
+      dfHereTop20Only <- dfHere[1:15,]
+      print(dfHereTop20Only)
+      dfHereElse <- dfHere[16:nrow(dfHere),]
+      totalSum <- sum(dfHereElse[,2])
+      colnames(dfHereTop20Only) <- c("Airline", "Count")
+      newRow <- data.frame(Airline = "Other", Count = totalSum)
+      dfHereTop20Only <- rbind(dfHereTop20Only, newRow)
+      return(pie(strtoi(dfHereTop20Only[,2]), labels = dfHereTop20Only$Airline, col = c("blue", "aquamarine4", "brown4", "darkslateblue", "khaki4","mediumslateblue","springgreen4", "turquoise4","tomato","thistle3","seagreen3")))
+    }
+    
+      
+    pie(strtoi(dfHere[,2]), labels = dfHere$Airline, col = c("blue", "aquamarine4", "brown4", "darkslateblue", "khaki4","mediumslateblue","springgreen4", "turquoise4","tomato","thistle3","seagreen3"))
+    
+  })
+
+  #### -- event handlers -- ####
+  
+  observeEvent(input$aircraftSearch, {
+    cols <- colnames(oldData())
+    cols <- cols[3:length(cols)]
+    cols <- gsub(pattern = "\\.", replacement =  " ", x = cols)
+    if(tolower(input$aircraftSearch) %in% tolower(cols))
+    {
+      idx = match(c(tolower(input$aircraftSearch)), tolower(cols))
+      updateTextInput(session, "aircraftSearch", value = cols[idx])
+      updateTabsetPanel(session, inputId = "aircraftSearchPanel", "validSearch")
+    }
+    else if(input$aircraftSearch == "")
+    {
+      updateTabsetPanel(session, inputId = "aircraftSearchPanel", "noSearch")
+    }
+    else
+    {
+      updateTabsetPanel(session, inputId = "aircraftSearchPanel", "invalidSearch")
+    }
+  })
+  
+  #### -- data manipulation ####
+  aircraftDF <- reactive({
+    req(newData())
+    
+    thisDF <- newData()
+    colnames(thisDF) <- gsub(pattern = "\\.", replacement =  " ", x = colnames(thisDF))
+    thisDF
+  })
+  
+  specificAircraftDF <- reactive({
+    req(aircraftDF)
+    
+    full <- aircraftDF()
+    indexOfPlane <- grep(input$aircraftSearch, colnames(full))
+    #print("HIII")
+    #print(indexOfPlane)
+    smallerDF <- full[, c(1, indexOfPlane)]
+    smallerDF <- smallerDF[apply(smallerDF!=0,1,all),]
+    smallerDF <- smallerDF[order(smallerDF[,2], decreasing = TRUE),]
+    smallerDF
+  })
+  
+  suggestedAircraft <- reactive({
+    aircraftVector <- colnames(newData())[3:ncol(newData())]
+    aircraftVector <- gsub(pattern = "\\.", replacement =  " ", x = aircraftVector)
+    lowerAircraftVector <- tolower(aircraftVector)
+    idx <- agrep(tolower(input$aircraftSearch), lowerAircraftVector, 0.05)
+    string <- ""
+    if(length(idx) == 1)
+    {
+      updateTextInput(session, "aircraftSearch", value = aircraftVector[idx])
+    }
+    else if(tolower(input$aircraftSearch) %in% lowerAircraftVector)
+    {
+      thisIdx <- which(lowerAircraftVector == tolower(input$aircraftSearch))
+      updateTextInput(session, "aircraftSearch", value = aircraftVector[thisIdx])
+    }
+    else
+    {
+      for(x in aircraftVector[idx])
+        string <- paste(string, x, ", ", sep = "")
+      string <- substr(string, 1, nchar(string) - 2)
+    }
+    string
   })
 
 }
