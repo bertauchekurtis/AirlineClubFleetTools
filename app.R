@@ -1,6 +1,5 @@
 # 17 march 2023
 # app.R
-# kurtis bertauche
 
 # libraries
 
